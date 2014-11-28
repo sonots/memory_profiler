@@ -21,28 +21,26 @@ module MemoryProfiler
       self.new(opts).run(&block)
     end
 
-    # Collects object allocation and memory of ruby code inside of passed block.
-    #
-    # @param [Hash] opts the options to create a message with.
-    # @option opts [Fixnum] :top max number of entries to output in report
-    # @option opts [Array <Class>] :trace an array of classes you explicitly want to trace
-    # @return [MemoryProfiler::Results]
-    def run(&block)
-
+    def start
       allocated, rvalue_size = nil
 
-      rvalue_size = GC::INTERNAL_CONSTANTS[:RVALUE_SIZE]
+      @rvalue_size = GC::INTERNAL_CONSTANTS[:RVALUE_SIZE]
       Helpers.full_gc
       GC.disable
 
-      ObjectSpace.trace_object_allocations do
-        generation = GC.count
-        block.call
-        allocated = object_list(generation, rvalue_size)
-      end
+      ObjectSpace.trace_object_allocations_start
+      @generation = GC.count
+    end
+
+    # @return [MemoryProfiler::Results]
+    def stop
+      raise 'MemoryProfiler is not started' unless @generation
+      allocated = object_list(@generation, @rvalue_size)
+      @generation, @rvalue_size = nil, nil
+      ObjectSpace.trace_object_allocations_stop
 
       results = Results.new
-      results.strings_allocated = results.string_report(allocated,top)
+      results.strings_allocated = results.string_report(allocated, top)
 
       GC.enable
 
@@ -60,8 +58,20 @@ module MemoryProfiler
         end
       end
 
-      results.register_results(allocated,retained,top)
+      results.register_results(allocated, retained, top)
       results
+    end
+
+    # Collects object allocation and memory of ruby code inside of passed block.
+    #
+    # @param [Hash] opts the options to create a message with.
+    # @option opts [Fixnum] :top max number of entries to output in report
+    # @option opts [Array <Class>] :trace an array of classes you explicitly want to trace
+    # @return [MemoryProfiler::Results]
+    def run(&block)
+      start
+      block.call
+      stop
     end
 
     def trace_all?
