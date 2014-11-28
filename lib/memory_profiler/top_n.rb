@@ -13,6 +13,8 @@ module MemoryProfiler
           self.dup
         end
 
+      sorted.reject! {|a| a.nil? }
+      sorted.reject! {|a| a[0].nil? or a[1].nil? }
       sorted.sort!
 
       found = []
